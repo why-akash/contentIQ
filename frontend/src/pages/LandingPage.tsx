@@ -12,10 +12,8 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../api/api";
 import { formatApiError } from "../utils/formatApiError";
-
-const BACKEND_URL = "http://127.0.0.1:8000/youtube/process";
 
 
 const features = [
@@ -148,8 +146,8 @@ const LandingPage = () => {
     setIsLoading(true);
 
     try {
-      const response = await axios.post(
-        BACKEND_URL,
+      const response = await api.post(
+        "/youtube/process",
         {
           youtube_url: url.trim(),
         },

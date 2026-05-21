@@ -14,21 +14,18 @@ from app.api.routes.chat import (
     router as chat_router
 )
 
+from app.core.config import (
+    settings
+)
+
 app = FastAPI(
     title="ContentIQ API"
 )
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
 
-    allow_origins=[
-        "http://localhost:5174",
-        "http://127.0.0.1:5173",
-
-        "http://localhost:5173",
-        "http://127.0.0.1:5173"
-    ],
+    allow_origins=settings.CORS_ORIGINS,
 
     allow_credentials=True,
     allow_methods=["*"],

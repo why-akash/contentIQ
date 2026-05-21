@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import axios from "axios";
+import api from "../api/api";
 import type { Message } from "../types/dashboard";
 import { formatApiError } from "../utils/formatApiError";
 
@@ -128,15 +128,12 @@ export const useDashboardChat = (
 
       try {
         const response =
-          await axios.post(
-            "http://127.0.0.1:8000/chat/",
+          await api.post(
+            "/chat/",
             {
               session_id:
                 sessionId,
               question: userText,
-            },
-            {
-              timeout: 60000,
             }
           );
 
