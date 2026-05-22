@@ -23,9 +23,5 @@ class Settings:
         ).split(",")
     ]
 
-    SUPADATA_API_KEY = os.getenv(
-        "SUPADATA_API_KEY"
-    )
-
 
 settings = Settings()

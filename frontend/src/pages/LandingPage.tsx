@@ -152,7 +152,7 @@ const LandingPage = () => {
           youtube_url: url.trim(),
         },
         {
-          timeout: 20000,
+          timeout: 120000,
         },
       );
 

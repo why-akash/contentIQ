@@ -5,6 +5,7 @@ import { formatApiError } from "../utils/formatApiError";
 
 export const useDashboardChat = (
   sessionId: string | undefined,
+  videoId: string | undefined,
 ) => {
   const [expandedChunks, setExpandedChunks] =
     useState<number[]>([]);
@@ -103,6 +104,7 @@ export const useDashboardChat = (
       if (
         !question.trim() ||
         !sessionId ||
+        !videoId ||
         isSending
       )
         return;
@@ -131,8 +133,8 @@ export const useDashboardChat = (
           await api.post(
             "/chat/",
             {
-              session_id:
-                sessionId,
+              session_id: sessionId,
+              video_id: videoId,
               question: userText,
             }
           );

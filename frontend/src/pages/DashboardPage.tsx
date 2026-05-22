@@ -60,7 +60,7 @@ const DashboardPage = () => {
     isSending,
     messagesRef,
     sendQuestion,
-  } = useDashboardChat(state?.session_id);
+  } = useDashboardChat(state?.session_id, state?.video_id);
 
   const {
     tldrInsights,

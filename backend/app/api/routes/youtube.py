@@ -46,13 +46,7 @@ async def process_youtube(request: YoutubeRequest):
             "status": "chat_ready"
         }
 
-    if request.transcript_segments:
-        transcript_data = {
-            "video_id": video_id,
-            "segments": [s.model_dump() for s in request.transcript_segments]
-        }
-    else:
-        transcript_data = TranscriptService.get_youtube_transcript(request.youtube_url)
+    transcript_data = TranscriptService.get_youtube_transcript(request.youtube_url)
 
     summary = ContentService.generate_summary(transcript_data["segments"])
 

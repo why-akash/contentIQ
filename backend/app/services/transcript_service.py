@@ -1,10 +1,7 @@
-import glob
 import os
-import shutil
 import tempfile
-
-import requests
 import yt_dlp
+
 from fastapi import HTTPException
 from groq import Groq
 
@@ -12,12 +9,12 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import (
     IpBlocked,
     NoTranscriptFound,
-    RequestBlocked,
     TranscriptsDisabled,
+    RequestBlocked
 )
 
-from app.core.config import settings
 from app.utils.youtube_utils import extract_video_id
+from app.core.config import settings
 
 
 class TranscriptService:
@@ -36,15 +33,6 @@ class TranscriptService:
                 }
             )
 
-        # Primary: Supadata API (no IP blocking issues)
-        if settings.SUPADATA_API_KEY:
-            result = TranscriptService._fetch_via_supadata(
-                video_id, youtube_url
-            )
-            if result:
-                return result
-
-        # Fallback: youtube_transcript_api
         try:
             transcript = YouTubeTranscriptApi().fetch(video_id)
 
@@ -57,55 +45,16 @@ class TranscriptService:
                 for item in transcript
             ]
 
+            full_text = " ".join(item.text for item in transcript)
+
             return {
                 "video_id": video_id,
-                "full_text": " ".join(item.text for item in transcript),
+                "full_text": full_text,
                 "segments": segments
             }
 
         except (IpBlocked, RequestBlocked, NoTranscriptFound, TranscriptsDisabled):
             return TranscriptService._whisper_fallback(video_id, youtube_url)
-
-    @staticmethod
-    def _fetch_via_supadata(video_id: str, youtube_url: str):
-        try:
-            response = requests.get(
-                "https://api.supadata.ai/v1/youtube/transcript",
-                params={"url": youtube_url},
-                headers={"x-api-key": settings.SUPADATA_API_KEY},
-                timeout=30
-            )
-
-            if not response.ok:
-                return None
-
-            data = response.json()
-            content = data.get("content", [])
-
-            if not content:
-                return None
-
-            segments = [
-                {
-                    "text": item["text"],
-                    "start": item["offset"] / 1000,
-                    "duration": item["duration"] / 1000
-                }
-                for item in content
-                if item.get("text")
-            ]
-
-            if not segments:
-                return None
-
-            return {
-                "video_id": video_id,
-                "full_text": " ".join(s["text"] for s in segments),
-                "segments": segments
-            }
-
-        except Exception:
-            return None
 
     @staticmethod
     def _whisper_fallback(video_id: str, youtube_url: str):
@@ -114,19 +63,16 @@ class TranscriptService:
 
             audio_path = os.path.join(tmpdir, video_id)
 
-            _COOKIES = "/etc/secrets/youtube_cookies.txt"
-
-            # no ffmpeg: select low-bitrate native audio to stay under Groq's 25MB limit
             ydl_opts = {
-                "format": "bestaudio[abr<=64]/bestaudio[abr<=96]/worstaudio",
+                "format": "bestaudio/best",
                 "outtmpl": audio_path + ".%(ext)s",
                 "quiet": True,
+                "postprocessors": [{
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "64",
+                }],
             }
-
-            if os.path.exists(_COOKIES):
-                cookies_copy = os.path.join(tmpdir, "cookies.txt")
-                shutil.copy(_COOKIES, cookies_copy)
-                ydl_opts["cookiefile"] = cookies_copy
 
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -141,17 +87,7 @@ class TranscriptService:
                     }
                 )
 
-            files = glob.glob(audio_path + ".*")
-            if not files:
-                raise HTTPException(
-                    status_code=500,
-                    detail={
-                        "status": "download_failed",
-                        "message": "Audio file not found after download."
-                    }
-                )
-
-            downloaded_path = files[0]
+            downloaded_path = f"{audio_path}.mp3"
 
             file_size = os.path.getsize(downloaded_path)
             if file_size > 24 * 1024 * 1024:
@@ -192,8 +128,10 @@ class TranscriptService:
                 for seg in transcription.segments
             ]
 
+            full_text = " ".join(seg["text"] for seg in segments)
+
             return {
                 "video_id": video_id,
-                "full_text": " ".join(seg["text"] for seg in segments),
+                "full_text": full_text,
                 "segments": segments
             }
