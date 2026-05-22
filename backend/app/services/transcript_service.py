@@ -33,6 +33,9 @@ class TranscriptService:
                 }
             )
 
+        print(f"\n[transcript] video_id: {video_id}")
+        print(f"[transcript] method: YouTube Transcript API")
+
         try:
             transcript = YouTubeTranscriptApi().fetch(video_id)
 
@@ -47,17 +50,22 @@ class TranscriptService:
 
             full_text = " ".join(item.text for item in transcript)
 
+            print(f"[transcript] success — {len(segments)} segments\n")
+
             return {
                 "video_id": video_id,
                 "full_text": full_text,
                 "segments": segments
             }
 
-        except (IpBlocked, RequestBlocked, NoTranscriptFound, TranscriptsDisabled):
+        except (IpBlocked, RequestBlocked, NoTranscriptFound, TranscriptsDisabled) as e:
+            print(f"[transcript] {type(e).__name__} — switching to Whisper fallback")
             return TranscriptService._whisper_fallback(video_id, youtube_url)
 
     @staticmethod
     def _whisper_fallback(video_id: str, youtube_url: str):
+
+        print(f"[whisper] downloading audio for {video_id}...")
 
         with tempfile.TemporaryDirectory() as tmpdir:
 
@@ -90,6 +98,7 @@ class TranscriptService:
             downloaded_path = f"{audio_path}.mp3"
 
             file_size = os.path.getsize(downloaded_path)
+            print(f"[whisper] audio size: {file_size / (1024 * 1024):.2f} MB")
             if file_size > 24 * 1024 * 1024:
                 raise HTTPException(
                     status_code=422,
@@ -98,6 +107,8 @@ class TranscriptService:
                         "message": "Audio exceeds 25 MB limit. Try a video under 45 minutes."
                     }
                 )
+
+            print(f"[whisper] transcribing with whisper-large-v3-turbo...")
 
             try:
                 client = Groq(api_key=settings.GROQ_API_KEY)
@@ -121,14 +132,16 @@ class TranscriptService:
 
             segments = [
                 {
-                    "text": seg.text,
-                    "start": seg.start,
-                    "duration": seg.end - seg.start
+                    "text": seg["text"] if isinstance(seg, dict) else seg.text,
+                    "start": seg["start"] if isinstance(seg, dict) else seg.start,
+                    "duration": (seg["end"] - seg["start"]) if isinstance(seg, dict) else (seg.end - seg.start),
                 }
                 for seg in transcription.segments
             ]
 
             full_text = " ".join(seg["text"] for seg in segments)
+
+            print(f"[whisper] success — {len(segments)} segments\n")
 
             return {
                 "video_id": video_id,

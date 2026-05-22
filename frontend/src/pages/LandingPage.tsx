@@ -4,9 +4,11 @@ import {
   Bolt,
   Brain,
   Clock3,
+  FileAudio,
   Loader2,
   Play,
   Sparkles,
+  Upload,
   Youtube,
   Zap,
 } from "lucide-react";
@@ -14,6 +16,12 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/api";
 import { formatApiError } from "../utils/formatApiError";
+
+type HistoryEntry = {
+  video_id: string;
+  title: string;
+  summary: string | Record<string, unknown>;
+};
 
 
 const features = [
@@ -92,14 +100,53 @@ const LandingBackground = () => (
   </div>
 );
 
+const getSummaryPreview = (summary: string | Record<string, unknown>): string => {
+  if (typeof summary === "string") return summary.slice(0, 140);
+  if (typeof summary?.tldr === "string") return summary.tldr.slice(0, 140);
+  return "Click to view full analysis";
+};
+
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 const LandingPage = () => {
   const navigate = useNavigate();
+  const [tab, setTab] = useState<"youtube" | "upload">("youtube");
   const [url, setUrl] = useState("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
 
-  const canSubmit = useMemo(() => url.trim().length > 0, [url]);
+  useEffect(() => {
+    api.get("/youtube/history").then((res) => setHistory(res.data)).catch(() => {});
+  }, []);
+
+  const handleHistoryClick = (entry: HistoryEntry) => {
+    navigate("/dashboard", {
+      state: {
+        summary: entry.summary,
+        status: "chat_ready",
+        session_id: crypto.randomUUID(),
+        video_id: entry.video_id,
+        youtube_url: `https://www.youtube.com/watch?v=${entry.video_id}`,
+      },
+    });
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const dropped = e.dataTransfer.files[0];
+    if (dropped) setUploadFile(dropped);
+  };
+
+  const canSubmit = useMemo(
+    () => (tab === "youtube" ? url.trim().length > 0 : uploadFile !== null),
+    [tab, url, uploadFile],
+  );
   const asideRef = useRef<HTMLElement>(null);
   const [asideHeight, setAsideHeight] = useState<number | undefined>();
 
@@ -138,6 +185,27 @@ const LandingPage = () => {
     setError(null);
     setStatus(null);
 
+    if (tab === "upload") {
+      if (!uploadFile) return;
+      setIsLoading(true);
+      try {
+        const formData = new FormData();
+        formData.append("file", uploadFile);
+        const response = await api.post("/upload/process", formData, {
+          timeout: 300000,
+        });
+        const { summary, status: responseStatus, session_id, video_id } = response.data;
+        navigate("/dashboard", {
+          state: { summary, status: responseStatus, session_id, video_id },
+        });
+      } catch (err) {
+        setError(formatApiError(err, "Unable to process the file. Please try again."));
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
     if (!validateYoutubeUrl(url)) {
       setError("Please paste a valid YouTube video link.");
       return;
@@ -148,14 +216,9 @@ const LandingPage = () => {
     try {
       const response = await api.post(
         "/youtube/process",
-        {
-          youtube_url: url.trim(),
-        },
-        {
-          timeout: 120000,
-        },
+        { youtube_url: url.trim() },
+        { timeout: 120000 },
       );
-
       const { summary, status: responseStatus, session_id, video_id } = response.data;
       setStatus(
         summary
@@ -163,21 +226,10 @@ const LandingPage = () => {
           : `Video processed. ${responseStatus ?? "AI answers will appear soon."}`,
       );
       navigate("/dashboard", {
-        state: {
-          summary,
-          status: responseStatus,
-          session_id,
-          video_id,
-          youtube_url: url.trim(),
-        },
+        state: { summary, status: responseStatus, session_id, video_id, youtube_url: url.trim() },
       });
     } catch (error) {
-      setError(
-        formatApiError(
-          error,
-          "Unable to analyze the video. Please try again.",
-        ),
-      );
+      setError(formatApiError(error, "Unable to analyze the video. Please try again."));
     } finally {
       setIsLoading(false);
     }
@@ -257,46 +309,149 @@ const LandingPage = () => {
                 />
 
                 <div className="relative space-y-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
-                    <label htmlFor="youtube-url" className="sr-only">
-                      YouTube video URL
-                    </label>
-                    <div className="relative min-w-0 flex-1">
-                      <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">
-                        <Youtube className="h-4 w-4" />
-                      </div>
-                      <input
-                        id="youtube-url"
-                        type="url"
-                        value={url}
-                        onChange={(event) => setUrl(event.target.value)}
-                        placeholder="https://www.youtube.com/watch?v=..."
-                        className="w-full rounded-xl border border-slate-700/80 bg-slate-900/80 py-3.5 pl-11 pr-4 text-slate-100 outline-none transition duration-300 placeholder:text-slate-600 focus:border-orange-400/60 focus:bg-slate-900 focus:ring-2 focus:ring-orange-500/15 sm:min-h-[3.25rem]"
-                      />
-                    </div>
+
+                  {/* Tab switcher */}
+                  <div className="flex gap-1 rounded-xl bg-slate-800/60 p-1">
                     <button
-                      type="submit"
-                      disabled={!canSubmit || isLoading}
-                      className="inline-flex min-h-[3.25rem] shrink-0 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-6 text-sm font-semibold text-white shadow-lg shadow-orange-900/30 transition duration-300 hover:from-orange-400 hover:to-orange-500 hover:shadow-orange-800/40 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none sm:px-7"
+                      type="button"
+                      onClick={() => { setTab("youtube"); setError(null); }}
+                      className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition duration-200 ${
+                        tab === "youtube"
+                          ? "bg-slate-700 text-white shadow-sm"
+                          : "text-slate-500 hover:text-slate-300"
+                      }`}
                     >
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Analyzing...
-                        </>
-                      ) : (
-                        <>
-                          Analyze video
-                          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                        </>
-                      )}
+                      <Youtube className="h-3.5 w-3.5" />
+                      YouTube URL
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setTab("upload"); setError(null); }}
+                      className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition duration-200 ${
+                        tab === "upload"
+                          ? "bg-slate-700 text-white shadow-sm"
+                          : "text-slate-500 hover:text-slate-300"
+                      }`}
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      Upload File
                     </button>
                   </div>
 
-                  <p className="text-xs leading-relaxed text-slate-500 sm:text-sm">
-                    YouTube URLs only. Results include summary, chapter timestamps, and
-                    chat-ready Q&amp;A on the next screen.
-                  </p>
+                  {/* YouTube tab */}
+                  {tab === "youtube" && (
+                    <>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
+                        <label htmlFor="youtube-url" className="sr-only">
+                          YouTube video URL
+                        </label>
+                        <div className="relative min-w-0 flex-1">
+                          <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">
+                            <Youtube className="h-4 w-4" />
+                          </div>
+                          <input
+                            id="youtube-url"
+                            type="url"
+                            value={url}
+                            onChange={(event) => setUrl(event.target.value)}
+                            placeholder="https://www.youtube.com/watch?v=..."
+                            className="w-full rounded-xl border border-slate-700/80 bg-slate-900/80 py-3.5 pl-11 pr-4 text-slate-100 outline-none transition duration-300 placeholder:text-slate-600 focus:border-orange-400/60 focus:bg-slate-900 focus:ring-2 focus:ring-orange-500/15 sm:min-h-[3.25rem]"
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          disabled={!canSubmit || isLoading}
+                          className="inline-flex min-h-[3.25rem] shrink-0 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-6 text-sm font-semibold text-white shadow-lg shadow-orange-900/30 transition duration-300 hover:from-orange-400 hover:to-orange-500 hover:shadow-orange-800/40 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none sm:px-7"
+                        >
+                          {isLoading ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Analyzing...
+                            </>
+                          ) : (
+                            <>
+                              Analyze video
+                              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      <p className="text-xs leading-relaxed text-slate-500 sm:text-sm">
+                        YouTube URLs only. Results include summary, chapter timestamps, and
+                        chat-ready Q&amp;A on the next screen.
+                      </p>
+                    </>
+                  )}
+
+                  {/* Upload tab */}
+                  {tab === "upload" && (
+                    <>
+                      <label
+                        htmlFor="file-upload"
+                        className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed py-8 transition duration-300 ${
+                          uploadFile
+                            ? "border-orange-500/40 bg-orange-950/20"
+                            : "border-slate-700/80 bg-slate-900/60 hover:border-slate-600 hover:bg-slate-900"
+                        }`}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={handleDrop}
+                      >
+                        {uploadFile ? (
+                          <>
+                            <FileAudio className="h-8 w-8 text-orange-400" />
+                            <div className="text-center">
+                              <p className="text-sm font-medium text-slate-100">{uploadFile.name}</p>
+                              <p className="mt-0.5 text-xs text-slate-500">{formatFileSize(uploadFile.size)}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.preventDefault(); setUploadFile(null); }}
+                              className="text-xs text-slate-600 transition hover:text-red-400"
+                            >
+                              Remove
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="h-8 w-8 text-slate-600" />
+                            <div className="text-center">
+                              <p className="text-sm text-slate-300">Drop file here or click to browse</p>
+                              <p className="mt-1 text-xs text-slate-600">MP4, MOV, AVI, WebM, MP3, M4A, WAV, FLAC · Max ~45 min</p>
+                            </div>
+                          </>
+                        )}
+                        <input
+                          id="file-upload"
+                          type="file"
+                          accept="video/mp4,video/quicktime,video/x-msvideo,video/webm,.mkv,.m4v,audio/mpeg,audio/mp4,audio/wav,audio/ogg,audio/flac,.flac,.m4a,.aac"
+                          className="sr-only"
+                          onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+                        />
+                      </label>
+
+                      <button
+                        type="submit"
+                        disabled={!canSubmit || isLoading}
+                        className="inline-flex w-full min-h-[3.25rem] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-6 text-sm font-semibold text-white shadow-lg shadow-orange-900/30 transition duration-300 hover:from-orange-400 hover:to-orange-500 hover:shadow-orange-800/40 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+                      >
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            Process file
+                            <ArrowRight className="h-4 w-4" />
+                          </>
+                        )}
+                      </button>
+
+                      <p className="text-xs leading-relaxed text-slate-500 sm:text-sm">
+                        Video files are converted to audio at 64 kbps before transcription. Large files may take up to 90 seconds.
+                      </p>
+                    </>
+                  )}
 
                   <AnimatePresence mode="wait">
                     {error ? (
@@ -434,6 +589,50 @@ const LandingPage = () => {
             </motion.div>
           </aside>
         </main>
+
+        <AnimatePresence>
+          {history.length > 0 && (
+            <motion.section
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5, duration: 0.5 }}
+              className="mt-12"
+            >
+              <div className="mb-4 flex items-center gap-2">
+                <Clock3 className="h-3.5 w-3.5 text-slate-500" />
+                <h2 className="text-sm font-semibold text-slate-400">Recently analyzed</h2>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {history.slice(0, 6).map((entry, i) => (
+                  <motion.button
+                    key={entry.video_id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.55 + i * 0.06 }}
+                    onClick={() => handleHistoryClick(entry)}
+                    className="glass-panel group flex gap-3 rounded-xl p-3 text-left transition duration-300 hover:border-orange-500/30 hover:bg-slate-800/60"
+                  >
+                    <img
+                      src={`https://img.youtube.com/vi/${entry.video_id}/mqdefault.jpg`}
+                      alt=""
+                      className="h-16 w-24 shrink-0 rounded-lg object-cover"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-slate-100">
+                        {entry.title}
+                      </p>
+                      <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-slate-500">
+                        {getSummaryPreview(entry.summary)}
+                      </p>
+                    </div>
+                    <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-slate-600 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:text-orange-400" />
+                  </motion.button>
+                ))}
+              </div>
+            </motion.section>
+          )}
+        </AnimatePresence>
 
         <motion.footer
           initial={{ opacity: 0 }}

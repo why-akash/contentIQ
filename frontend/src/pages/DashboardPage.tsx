@@ -45,11 +45,11 @@ const DashboardPage = () => {
   ]);
 
   const embedUrl = useMemo(() => {
-    if (!state?.video_id)
+    if (!state?.youtube_url || !state?.video_id)
       return null;
 
     return `https://www.youtube.com/embed/${state.video_id}`;
-  }, [state?.video_id]);
+  }, [state?.youtube_url, state?.video_id]);
 
   const {
     expandedChunks,

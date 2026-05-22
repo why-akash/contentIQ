@@ -2,6 +2,7 @@ import uuid
 import json
 import os
 
+import httpx
 from fastapi import APIRouter
 from app.models.youtube_model import YoutubeRequest
 from app.services.transcript_service import TranscriptService
@@ -27,6 +28,31 @@ def _save_cache(cache: dict):
         json.dump(cache, f)
 
 
+async def _fetch_video_title(video_id: str) -> str:
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(
+                "https://www.youtube.com/oembed",
+                params={"url": f"https://www.youtube.com/watch?v={video_id}", "format": "json"}
+            )
+            return resp.json().get("title", video_id)
+    except Exception:
+        return video_id
+
+
+@router.get("/history")
+async def get_video_history():
+    cache = _load_cache()
+    return [
+        {
+            "video_id": vid,
+            "title": data.get("title", vid),
+            "summary": data.get("summary", ""),
+        }
+        for vid, data in reversed(list(cache.items()))
+    ]
+
+
 @router.post("/process")
 async def process_youtube(request: YoutubeRequest):
 
@@ -34,11 +60,9 @@ async def process_youtube(request: YoutubeRequest):
 
     cache = _load_cache()
 
-    session_id = str(uuid.uuid4())  # always new per user
+    session_id = str(uuid.uuid4())
 
     if video_id and video_id in cache:
-        # embeddings already stored under video_id collection
-        # just return fresh session_id + cached summary
         return {
             "session_id": session_id,
             "video_id": video_id,
@@ -50,16 +74,15 @@ async def process_youtube(request: YoutubeRequest):
 
     summary = ContentService.generate_summary(transcript_data["segments"])
 
-    # store embeddings under video_id (not session_id)
-    # so all users share one collection per video
     IngestionService().store_embeddings(
         transcript_segments=transcript_data["segments"],
-        session_id=transcript_data["video_id"],   # <-- video_id as collection name
+        session_id=transcript_data["video_id"],
         video_id=transcript_data["video_id"]
     )
 
     if video_id:
-        cache[video_id] = {"summary": summary}
+        title = await _fetch_video_title(video_id)
+        cache[video_id] = {"summary": summary, "title": title}
         _save_cache(cache)
 
     return {
