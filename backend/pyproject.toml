@@ -24,4 +24,5 @@ dependencies = [
     "tiktoken>=0.13.0",
     "uvicorn[standard]>=0.47.0",
     "youtube-transcript-api>=1.2.4",
+    "yt-dlp>=2026.3.17",
 ]

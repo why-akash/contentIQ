@@ -133,13 +133,13 @@ class RetrievalService:
 
     def get_retriever(
         self,
-        session_id: str
+        video_id: str
     ):
 
         vector_store = (
             VectorStoreService()
             .get_vector_store(
-                session_id
+                video_id
             )
         )
 
@@ -160,15 +160,11 @@ class RetrievalService:
     def ask_question(
         self,
         session_id: str,
+        video_id: str,
         question: str
     ):
 
-        history = (
-            chat_memory.get(
-                session_id,
-                []
-            )
-        )
+        history = chat_memory.get(session_id, [])
 
         formatted_history = (
             self._format_history(
@@ -244,7 +240,7 @@ class RetrievalService:
 
         retriever = (
             self.get_retriever(
-                session_id
+                video_id
             )
         )
 

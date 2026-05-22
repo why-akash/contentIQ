@@ -23,3 +23,5 @@ tiktoken
 
 numpy
 pandas
+
+yt-dlp

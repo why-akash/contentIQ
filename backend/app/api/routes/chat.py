@@ -1,42 +1,19 @@
-from fastapi import (
-    APIRouter
-)
+from fastapi import APIRouter
+from app.models.chat_model import ChatRequest
+from app.rag.retrieval import RetrievalService
 
-from app.models.chat_model import (
-    ChatRequest
-)
-
-from app.rag.retrieval import (
-    RetrievalService
-)
-
-router = APIRouter(
-    prefix="/chat",
-    tags=["Chat"]
-)
+router = APIRouter(prefix="/chat", tags=["Chat"])
 
 
 @router.post("/")
-async def chat(
-    request: ChatRequest
-):
+async def chat(request: ChatRequest):
 
-    retrieval_service = (
-        RetrievalService()
+    retrieval_service = RetrievalService()
+
+    answer = retrieval_service.ask_question(
+        session_id=request.session_id,
+        video_id=request.video_id,
+        question=request.question
     )
 
-    answer = (
-        retrieval_service
-        .ask_question(
-            session_id=
-            request.session_id,
-
-            question=
-            request.question
-        )
-    )
-
-    return {
-        "answer":
-        answer
-    }
+    return {"answer": answer}
