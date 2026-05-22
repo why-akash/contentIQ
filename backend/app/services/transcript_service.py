@@ -1,3 +1,4 @@
+import glob
 import os
 import tempfile
 import yt_dlp
@@ -63,16 +64,17 @@ class TranscriptService:
 
             audio_path = os.path.join(tmpdir, video_id)
 
+            _COOKIES = "/etc/secrets/youtube_cookies.txt"
+
+            # no ffmpeg: select low-bitrate native audio to stay under Groq's 25MB limit
             ydl_opts = {
-                "format": "bestaudio/best",
+                "format": "bestaudio[abr<=64]/bestaudio[abr<=96]/worstaudio",
                 "outtmpl": audio_path + ".%(ext)s",
                 "quiet": True,
-                "postprocessors": [{
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": "64",
-                }],
             }
+
+            if os.path.exists(_COOKIES):
+                ydl_opts["cookiefile"] = _COOKIES
 
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -87,7 +89,17 @@ class TranscriptService:
                     }
                 )
 
-            downloaded_path = f"{audio_path}.mp3"
+            files = glob.glob(audio_path + ".*")
+            if not files:
+                raise HTTPException(
+                    status_code=500,
+                    detail={
+                        "status": "download_failed",
+                        "message": "Audio file not found after download."
+                    }
+                )
+
+            downloaded_path = files[0]
 
             file_size = os.path.getsize(downloaded_path)
             if file_size > 24 * 1024 * 1024:
