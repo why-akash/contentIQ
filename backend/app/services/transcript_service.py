@@ -1,5 +1,6 @@
 import glob
 import os
+import shutil
 import tempfile
 import yt_dlp
 
@@ -74,7 +75,9 @@ class TranscriptService:
             }
 
             if os.path.exists(_COOKIES):
-                ydl_opts["cookiefile"] = _COOKIES
+                cookies_copy = os.path.join(tmpdir, "cookies.txt")
+                shutil.copy(_COOKIES, cookies_copy)
+                ydl_opts["cookiefile"] = cookies_copy
 
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
