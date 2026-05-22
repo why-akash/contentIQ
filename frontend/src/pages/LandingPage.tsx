@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/api";
 import { formatApiError } from "../utils/formatApiError";
+import { BackendArchitecture } from "../components/landing/BackendArchitecture";
 
 type HistoryEntry = {
   video_id: string;
@@ -633,6 +634,8 @@ const LandingPage = () => {
             </motion.section>
           )}
         </AnimatePresence>
+
+        <BackendArchitecture />
 
         <motion.footer
           initial={{ opacity: 0 }}
