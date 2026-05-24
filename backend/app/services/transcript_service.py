@@ -254,7 +254,7 @@ class TranscriptService:
             print(f"[whisper] transcribing with whisper-large-v3-turbo...")
 
             try:
-                client = Groq(api_key=settings.GROQ_API_KEY)
+                client = Groq(api_key=settings.GROQ_API_KEY, timeout=60)
 
                 with open(downloaded_path, "rb") as audio_file:
                     transcription = client.audio.transcriptions.create(
