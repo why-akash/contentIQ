@@ -124,6 +124,7 @@ const LandingPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [uploadJobId, setUploadJobId] = useState<string | null>(null);
+  const [modalStep, setModalStep] = useState(0);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
 
   const refreshHistory = () => {
@@ -173,6 +174,7 @@ const LandingPage = () => {
           clearInterval(interval);
           setJobId(null);
           setIsLoading(false);
+          setModalStep(0);
           navigate("/dashboard", {
             state: {
               summary: data.summary,
@@ -186,12 +188,16 @@ const LandingPage = () => {
           clearInterval(interval);
           setJobId(null);
           setIsLoading(false);
+          setModalStep(0);
           setError(formatApiError({ response: { data: { detail: data.detail } } }, "Processing failed."));
+        } else if (data.step !== undefined) {
+          setModalStep(data.step);
         }
       } catch (err) {
         clearInterval(interval);
         setJobId(null);
         setIsLoading(false);
+        setModalStep(0);
         setError(formatApiError(err, "Unable to check processing status."));
       }
     }, 3000);
@@ -224,6 +230,7 @@ const LandingPage = () => {
           clearInterval(interval);
           setUploadJobId(null);
           setIsLoading(false);
+          setModalStep(0);
           navigate("/dashboard", {
             state: {
               summary: data.summary,
@@ -236,12 +243,16 @@ const LandingPage = () => {
           clearInterval(interval);
           setUploadJobId(null);
           setIsLoading(false);
+          setModalStep(0);
           setError(formatApiError({ response: { data: { detail: data.detail } } }, "Processing failed."));
+        } else if (data.step !== undefined) {
+          setModalStep(data.step);
         }
       } catch (err) {
         clearInterval(interval);
         setUploadJobId(null);
         setIsLoading(false);
+        setModalStep(0);
         setError(formatApiError(err, "Unable to check processing status."));
       }
     }, 3000);
@@ -311,6 +322,7 @@ const LandingPage = () => {
 
     if (tab === "upload") {
       if (!uploadFile) return;
+      setModalStep(1); // uploads always start at "Transcribing audio"
       setIsLoading(true);
       try {
         const formData = new FormData();
@@ -346,6 +358,7 @@ const LandingPage = () => {
       return;
     }
 
+    setModalStep(0); // YouTube starts at "Fetching transcript"
     setIsLoading(true);
 
     try {
@@ -382,6 +395,7 @@ const LandingPage = () => {
       <AnalyzingModal
         open={isLoading}
         label={tab === "youtube" ? url.trim() || undefined : uploadFile?.name}
+        step={modalStep}
       />
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10">

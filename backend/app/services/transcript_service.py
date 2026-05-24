@@ -21,7 +21,7 @@ from app.core.config import settings
 class TranscriptService:
 
     @staticmethod
-    def get_youtube_transcript(youtube_url: str):
+    def get_youtube_transcript(youtube_url: str, step_callback=None):
 
         video_id = extract_video_id(youtube_url)
 
@@ -61,17 +61,17 @@ class TranscriptService:
 
         except (IpBlocked, RequestBlocked, NoTranscriptFound, TranscriptsDisabled) as e:
             print(f"[transcript] {type(e).__name__} — trying Supadata fallback")
-            return TranscriptService._supadata_fallback(video_id, youtube_url)
+            return TranscriptService._supadata_fallback(video_id, youtube_url, step_callback)
 
     @staticmethod
-    def _supadata_fallback(video_id: str, youtube_url: str):
+    def _supadata_fallback(video_id: str, youtube_url: str, step_callback=None):
 
         print("\n========== SUPADATA FALLBACK ==========")
 
         if not settings.SUPADATA_API_KEY:
             print("[supadata] ❌ SUPADATA_API_KEY missing")
             print("[supadata] → switching to Whisper fallback\n")
-            return TranscriptService._whisper_fallback(video_id, youtube_url)
+            return TranscriptService._whisper_fallback(video_id, youtube_url, step_callback)
 
         print(f"[supadata] video_id: {video_id}")
         print("[supadata] API key found")
@@ -102,8 +102,7 @@ class TranscriptService:
                 print("[supadata] ❌ 404 no captions")
                 print("[supadata] → switching to Whisper\n")
                 return TranscriptService._whisper_fallback(
-                    video_id,
-                    youtube_url
+                    video_id, youtube_url, step_callback
                 )
 
             if resp.status_code != 200:
@@ -112,8 +111,7 @@ class TranscriptService:
                 )
                 print("[supadata] → switching to Whisper\n")
                 return TranscriptService._whisper_fallback(
-                    video_id,
-                    youtube_url
+                    video_id, youtube_url, step_callback
                 )
 
             data = resp.json()
@@ -139,8 +137,7 @@ class TranscriptService:
                 print("[supadata] ❌ empty content")
                 print("[supadata] → switching to Whisper\n")
                 return TranscriptService._whisper_fallback(
-                    video_id,
-                    youtube_url
+                    video_id, youtube_url, step_callback
                 )
 
             segments = [
@@ -180,12 +177,14 @@ class TranscriptService:
             print("[supadata] → switching to Whisper\n")
 
             return TranscriptService._whisper_fallback(
-                video_id,
-                youtube_url
+                video_id, youtube_url, step_callback
             )
-    
+
     @staticmethod
-    def _whisper_fallback(video_id: str, youtube_url: str):
+    def _whisper_fallback(video_id: str, youtube_url: str, step_callback=None):
+
+        if step_callback:
+            step_callback(1)  # signal "Transcribing audio" to the modal
 
         print(f"[whisper] downloading audio for {video_id}...")
 

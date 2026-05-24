@@ -1,6 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Brain, Database, FileText, Mic2, Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
 
 const STEPS = [
   { icon: FileText, label: "Fetching transcript",      color: "#38bdf8" },
@@ -10,25 +9,14 @@ const STEPS = [
   { icon: Sparkles, label: "Almost ready…",             color: "#fb7185" },
 ];
 
-// Advance a step roughly every 12s — just for visual feedback, not tied to real progress
-const STEP_INTERVAL_MS = 12000;
-
 interface Props {
   open: boolean;
   label?: string; // e.g. the YouTube URL or file name
+  step?: number;  // 0-4, driven by real backend progress
 }
 
-export function AnalyzingModal({ open, label }: Props) {
-  const [step, setStep] = useState(0);
-
-  useEffect(() => {
-    if (!open) { setStep(0); return; }
-    const t = setInterval(() =>
-      setStep(s => (s < STEPS.length - 1 ? s + 1 : s)),
-      STEP_INTERVAL_MS
-    );
-    return () => clearInterval(t);
-  }, [open]);
+export function AnalyzingModal({ open, label, step = 0 }: Props) {
+  const currentStep = Math.min(Math.max(step, 0), STEPS.length - 1);
 
   return (
     <AnimatePresence>
@@ -53,31 +41,31 @@ export function AnalyzingModal({ open, label }: Props) {
             <div className="relative mx-auto mb-6 flex h-16 w-16 items-center justify-center">
               <motion.div
                 className="absolute inset-0 rounded-full"
-                style={{ border: `2px solid ${STEPS[step].color}40` }}
+                style={{ border: `2px solid ${STEPS[currentStep].color}40` }}
                 animate={{ scale: [1, 1.35, 1], opacity: [0.6, 0, 0.6] }}
                 transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
               />
               <motion.div
                 className="absolute inset-0 rounded-full"
-                style={{ border: `2px solid ${STEPS[step].color}25` }}
+                style={{ border: `2px solid ${STEPS[currentStep].color}25` }}
                 animate={{ scale: [1, 1.6, 1], opacity: [0.4, 0, 0.4] }}
                 transition={{ duration: 2, repeat: Infinity, ease: "easeInOut", delay: 0.4 }}
               />
               <div
                 className="relative flex h-12 w-12 items-center justify-center rounded-full"
-                style={{ background: `${STEPS[step].color}18`, border: `1.5px solid ${STEPS[step].color}40` }}
+                style={{ background: `${STEPS[currentStep].color}18`, border: `1.5px solid ${STEPS[currentStep].color}40` }}
               >
                 <AnimatePresence mode="wait">
                   <motion.div
-                    key={step}
+                    key={currentStep}
                     initial={{ opacity: 0, scale: 0.7 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.7 }}
                     transition={{ duration: 0.2 }}
                   >
                     {(() => {
-                      const Icon = STEPS[step].icon;
-                      return <Icon className="h-5 w-5" style={{ color: STEPS[step].color }} />;
+                      const Icon = STEPS[currentStep].icon;
+                      return <Icon className="h-5 w-5" style={{ color: STEPS[currentStep].color }} />;
                     })()}
                   </motion.div>
                 </AnimatePresence>
@@ -92,15 +80,15 @@ export function AnalyzingModal({ open, label }: Props) {
             {/* Current step label */}
             <AnimatePresence mode="wait">
               <motion.p
-                key={step}
+                key={currentStep}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.25 }}
                 className="mb-5 text-center text-sm"
-                style={{ color: STEPS[step].color }}
+                style={{ color: STEPS[currentStep].color }}
               >
-                {STEPS[step].label}
+                {STEPS[currentStep].label}
               </motion.p>
             </AnimatePresence>
 
@@ -110,9 +98,9 @@ export function AnalyzingModal({ open, label }: Props) {
                 <motion.div
                   key={i}
                   animate={{
-                    width: i === step ? 20 : 6,
-                    backgroundColor: i <= step ? s.color : "#334155",
-                    opacity: i <= step ? 1 : 0.4,
+                    width: i === currentStep ? 20 : 6,
+                    backgroundColor: i <= currentStep ? s.color : "#334155",
+                    opacity: i <= currentStep ? 1 : 0.4,
                   }}
                   transition={{ duration: 0.35 }}
                   className="h-1.5 rounded-full"

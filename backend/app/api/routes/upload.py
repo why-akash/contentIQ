@@ -47,6 +47,7 @@ async def _run_upload_pipeline(job_id: str, data: bytes, filename: str, file_id:
 
         # ── Step 1: Transcription ────────────────────────────
         print(f"[upload-pipeline] step 1/3 — transcription  ({len(data) / (1024*1024):.2f} MB raw)")
+        _upload_jobs[job_id]["step"] = 1  # "Transcribing audio"
         transcript_data = await asyncio.wait_for(
             loop.run_in_executor(None, UploadService.transcribe, data, filename),
             timeout=180,
@@ -55,6 +56,7 @@ async def _run_upload_pipeline(job_id: str, data: bytes, filename: str, file_id:
 
         # ── Step 2: Summary ──────────────────────────────────
         print(f"[upload-pipeline] step 2/3 — summarization")
+        _upload_jobs[job_id]["step"] = 2  # "Generating summary"
         summary = await asyncio.wait_for(
             loop.run_in_executor(None, ContentService.generate_summary, transcript_data["segments"]),
             timeout=90,
@@ -63,6 +65,7 @@ async def _run_upload_pipeline(job_id: str, data: bytes, filename: str, file_id:
 
         # ── Step 3: Embeddings ───────────────────────────────
         print(f"[upload-pipeline] step 3/3 — embeddings + ChromaDB")
+        _upload_jobs[job_id]["step"] = 3  # "Indexing for chat"
         await asyncio.wait_for(
             loop.run_in_executor(
                 None,
@@ -75,6 +78,7 @@ async def _run_upload_pipeline(job_id: str, data: bytes, filename: str, file_id:
             timeout=120,
         )
         print(f"[upload-pipeline] step 3/3 ✅ — embeddings stored")
+        _upload_jobs[job_id]["step"] = 4  # "Almost ready…"
 
         # ── Done ─────────────────────────────────────────────
         session_id = str(uuid.uuid4())
@@ -151,7 +155,7 @@ async def process_upload(background_tasks: BackgroundTasks, file: UploadFile = F
         }
 
     job_id = str(uuid.uuid4())
-    _upload_jobs[job_id] = {"status": "processing"}
+    _upload_jobs[job_id] = {"status": "processing", "step": 1}
 
     print(f"[upload] starting background pipeline  job={job_id}  file_id={file_id}")
     background_tasks.add_task(_run_upload_pipeline, job_id, data, filename, file_id)
