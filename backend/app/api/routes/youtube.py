@@ -67,7 +67,7 @@ async def _run_pipeline(job_id: str, video_id: str, youtube_url: str, title: str
                     video_id=transcript_data["video_id"]
                 )
             ),
-            timeout=60,
+            timeout=120,
         )
 
         session_id = str(uuid.uuid4())
