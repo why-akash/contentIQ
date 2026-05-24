@@ -1,8 +1,18 @@
 import json
+import re
 import tiktoken
 
 from app.rag.ingestion import IngestionService
 from app.core.llm_helper import LLMHelper
+
+
+def _parse_llm_json(content: str) -> dict:
+    """Parse JSON from LLM response, stripping markdown code fences if present."""
+    text = content.strip()
+    # Strip ```json ... ``` or ``` ... ``` wrappers
+    text = re.sub(r"^```(?:json)?\s*", "", text)
+    text = re.sub(r"\s*```$", "", text.strip())
+    return json.loads(text.strip())
 
 
 _SUMMARY_JSON_SCHEMA = """
@@ -131,20 +141,13 @@ class ContentService:
             )
 
             try:
-                return json.loads(
-                    response.content
-                )
+                return _parse_llm_json(response.content)
 
             except Exception:
-
                 return {
-                    "tldr":
-                    response.content,
-
+                    "tldr": response.content,
                     "key_concepts": [],
-
                     "main_takeaways": [],
-
                     "action_items": []
                 }
 

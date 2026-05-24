@@ -135,7 +135,7 @@ const LandingPage = () => {
   };
 
   useEffect(() => {
-    refreshHistory();
+    api.get("/youtube/history").then((res) => setHistory(res.data)).catch(() => {});
   }, []);
 
   // Re-poll history every 5s while any entry is still processing
