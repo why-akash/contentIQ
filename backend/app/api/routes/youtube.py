@@ -48,21 +48,26 @@ async def _run_pipeline(job_id: str, video_id: str, youtube_url: str, title: str
     try:
         loop = asyncio.get_event_loop()
 
-        transcript_data = await loop.run_in_executor(
-            None, TranscriptService.get_youtube_transcript, youtube_url
+        transcript_data = await asyncio.wait_for(
+            loop.run_in_executor(None, TranscriptService.get_youtube_transcript, youtube_url),
+            timeout=60,
         )
 
-        summary = await loop.run_in_executor(
-            None, ContentService.generate_summary, transcript_data["segments"]
+        summary = await asyncio.wait_for(
+            loop.run_in_executor(None, ContentService.generate_summary, transcript_data["segments"]),
+            timeout=90,
         )
 
-        await loop.run_in_executor(
-            None,
-            lambda: IngestionService().store_embeddings(
-                transcript_segments=transcript_data["segments"],
-                session_id=transcript_data["video_id"],
-                video_id=transcript_data["video_id"]
-            )
+        await asyncio.wait_for(
+            loop.run_in_executor(
+                None,
+                lambda: IngestionService().store_embeddings(
+                    transcript_segments=transcript_data["segments"],
+                    session_id=transcript_data["video_id"],
+                    video_id=transcript_data["video_id"]
+                )
+            ),
+            timeout=60,
         )
 
         session_id = str(uuid.uuid4())
@@ -79,8 +84,19 @@ async def _run_pipeline(job_id: str, video_id: str, youtube_url: str, title: str
             "summary": summary,
         }
 
+    except asyncio.TimeoutError:
+        cache = _load_cache()
+        if video_id in cache:
+            cache[video_id]["status"] = "error"
+            cache[video_id]["summary"] = None
+            _save_cache(cache)
+        _jobs[job_id] = {
+            "status": "error",
+            "detail": {"status": "timeout", "message": "Processing timed out. Try a shorter video or upload the file directly."}
+        }
+        print(f"[pipeline] ❌ timeout for job {job_id}")
+
     except HTTPException as e:
-        # Mark cache entry as error so history shows it correctly
         cache = _load_cache()
         if video_id in cache:
             cache[video_id]["status"] = "error"
@@ -98,6 +114,7 @@ async def _run_pipeline(job_id: str, video_id: str, youtube_url: str, title: str
             "status": "error",
             "detail": {"status": "pipeline_error", "message": str(e)}
         }
+        print(f"[pipeline] ❌ exception for job {job_id}: {e}")
 
 
 @router.get("/history")

@@ -8,11 +8,9 @@ from app.core.config import (
 
 
 llm = ChatGroq(
-    api_key=
-    settings.GROQ_API_KEY,
-
-    model=
-    settings.MODEL_NAME,
-
-    temperature=0.2
+    api_key=settings.GROQ_API_KEY,
+    model=settings.MODEL_NAME,
+    temperature=0.2,
+    timeout=45,
+    max_retries=1,
 )

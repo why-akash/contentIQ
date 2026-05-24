@@ -149,7 +149,21 @@ const LandingPage = () => {
   useEffect(() => {
     if (!jobId) return;
 
+    let polls = 0;
+    const MAX_POLLS = 40; // 40 × 3s = 2 minutes max
+
     const interval = setInterval(async () => {
+      polls += 1;
+
+      // Give up after 2 minutes
+      if (polls > MAX_POLLS) {
+        clearInterval(interval);
+        setJobId(null);
+        setIsLoading(false);
+        setError("Processing is taking too long. The video may be too long or the server is busy. Try uploading the file directly.");
+        return;
+      }
+
       try {
         const res = await api.get(`/youtube/status/${jobId}`);
         const data = res.data;
