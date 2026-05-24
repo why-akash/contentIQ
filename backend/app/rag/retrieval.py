@@ -165,6 +165,8 @@ class RetrievalService:
     ):
 
         history = chat_memory.get(session_id, [])
+        print(f"\n[retrieval] session={session_id[:8]}…  video={video_id[:12]}…  history_turns={len(history)}")
+        print(f"[retrieval] question: {question[:120]}")
 
         formatted_history = (
             self._format_history(
@@ -178,9 +180,10 @@ class RetrievalService:
                 question
             )
         ):
+            print(f"[retrieval] path=REVISION — rewriting last answer without retrieval")
 
             if not history:
-
+                print(f"[retrieval] no history — cannot revise")
                 return {
                     "answer":
                     "Ask a question about the video first, then I can shorten it.",
@@ -221,6 +224,7 @@ class RetrievalService:
             )
 
             answer = response.content
+            print(f"[retrieval] revision answer: {answer[:120]}")
 
             if (
                 session_id
@@ -251,9 +255,16 @@ class RetrievalService:
             )
         )
 
+        if retrieval_query != question:
+            print(f"[retrieval] path=FOLLOWUP — rewritten query: {retrieval_query[:120]}")
+        else:
+            print(f"[retrieval] path=STANDARD")
+
+        print(f"[retrieval] running MMR retrieval (k=5, fetch_k=15)…")
         docs = retriever.invoke(
             retrieval_query
         )
+        print(f"[retrieval] MMR returned {len(docs)} docs")
 
         query_words = set(
             word
@@ -291,11 +302,13 @@ class RetrievalService:
                 for doc, score
                 in scored_docs[:3]
             ]
+            print(f"[retrieval] keyword re-rank applied — top {len(docs)} docs kept")
         else:
             docs = docs[:3]
+            print(f"[retrieval] no keyword overlap — using top {len(docs)} MMR docs as-is")
 
         if not docs:
-
+            print(f"[retrieval] no relevant docs found — returning fallback")
             return {
                 "answer":
                 "This wasn't discussed.",
@@ -338,6 +351,9 @@ Content: {doc.page_content}"""
             )
         )
 
+        print(f"[retrieval] best chunk: {start_timestamp}–{end_timestamp}  needs_timestamp={needs_timestamp}")
+        print(f"[retrieval] best chunk preview: {best_doc.page_content[:100]}")
+
         timestamp_instruction = (
             f"Mention this timeframe naturally once: around {start_timestamp} to {end_timestamp}."
             if needs_timestamp
@@ -375,6 +391,7 @@ Content: {doc.page_content}"""
         7. If not in context: "This wasn't discussed."
         """
 
+        print(f"[retrieval] calling LLM…")
         response = LLMHelper.safe_llm_call(
             prompt
         )
@@ -382,6 +399,8 @@ Content: {doc.page_content}"""
         answer = (
             response.content
         )
+
+        print(f"[retrieval] LLM answer: {answer[:150]}")
 
         if (
             session_id
@@ -400,6 +419,8 @@ Content: {doc.page_content}"""
             "answer":
             answer
         })
+
+        print(f"[retrieval] memory updated — {len(chat_memory[session_id])} turns stored\n")
 
         return {
             "answer":

@@ -65,7 +65,11 @@ class UploadService:
         raw_mb = len(data) / (1024 * 1024)
         is_video = UploadService._is_video(filename)
         kind = "video" if is_video else "audio"
-        print(f"\n[upload] file: {filename} ({raw_mb:.2f} MB, {kind})")
+
+        print(f"\n[upload] ── TRANSCRIPTION START ──────────────────────")
+        print(f"[upload] file     : {filename}")
+        print(f"[upload] type     : {kind}")
+        print(f"[upload] raw size : {raw_mb:.2f} MB")
 
         with tempfile.TemporaryDirectory() as tmpdir:
             ext = os.path.splitext(filename.lower())[1] or ".mp4"
@@ -74,16 +78,23 @@ class UploadService:
             with open(original_path, "wb") as f:
                 f.write(data)
 
+            print(f"[upload] written to temp: {original_path}")
+
             if is_video:
-                print(f"[upload] converting video → mp3 at 64kbps...")
+                print(f"[upload] converting video → mp3 at 64 kbps mono...")
                 audio_path = os.path.join(tmpdir, "audio.mp3")
                 UploadService._convert_to_mp3(original_path, audio_path)
+                print(f"[upload] ffmpeg conversion complete")
             else:
                 audio_path = original_path
+                print(f"[upload] audio file — skipping ffmpeg conversion")
 
             file_size = os.path.getsize(audio_path)
-            print(f"[upload] audio size: {file_size / (1024 * 1024):.2f} MB")
+            audio_mb = file_size / (1024 * 1024)
+            print(f"[upload] audio size after conversion: {audio_mb:.2f} MB")
+
             if file_size > 24 * 1024 * 1024:
+                print(f"[upload] ❌ audio too large ({audio_mb:.2f} MB > 24 MB limit)")
                 raise HTTPException(
                     status_code=422,
                     detail={
@@ -92,7 +103,7 @@ class UploadService:
                     }
                 )
 
-            print(f"[upload] transcribing with whisper-large-v3-turbo...")
+            print(f"[upload] sending to Groq Whisper (whisper-large-v3-turbo)...")
 
             try:
                 client = Groq(api_key=settings.GROQ_API_KEY)
@@ -103,7 +114,9 @@ class UploadService:
                         response_format="verbose_json",
                         timestamp_granularities=["segment"]
                     )
-            except Exception:
+                print(f"[upload] Groq Whisper response received")
+            except Exception as e:
+                print(f"[upload] ❌ Groq Whisper failed: {e}")
                 raise HTTPException(
                     status_code=500,
                     detail={
@@ -121,7 +134,10 @@ class UploadService:
                 for seg in transcription.segments
             ]
 
-            print(f"[upload] success — {len(segments)} segments\n")
+            print(f"[upload] ✅ {len(segments)} segments extracted")
+            if segments:
+                print(f"[upload] first segment: {segments[0]}")
+            print(f"[upload] ── TRANSCRIPTION END ────────────────────────\n")
 
             return {
                 "full_text": " ".join(seg["text"] for seg in segments),

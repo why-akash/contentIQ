@@ -123,6 +123,7 @@ const LandingPage = () => {
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
+  const [uploadJobId, setUploadJobId] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
 
   const refreshHistory = () => {
@@ -198,6 +199,56 @@ const LandingPage = () => {
     return () => clearInterval(interval);
   }, [jobId, navigate, url]);
 
+  useEffect(() => {
+    if (!uploadJobId) return;
+
+    let polls = 0;
+    const MAX_POLLS = 80; // 80 × 3s = 4 minutes max (uploads can take longer)
+
+    const interval = setInterval(async () => {
+      polls += 1;
+
+      if (polls > MAX_POLLS) {
+        clearInterval(interval);
+        setUploadJobId(null);
+        setIsLoading(false);
+        setError("Processing is taking too long. Try a shorter file (under 45 minutes).");
+        return;
+      }
+
+      try {
+        const res = await api.get(`/upload/status/${uploadJobId}`);
+        const data = res.data;
+
+        if (data.status === "chat_ready") {
+          clearInterval(interval);
+          setUploadJobId(null);
+          setIsLoading(false);
+          navigate("/dashboard", {
+            state: {
+              summary: data.summary,
+              status: data.status,
+              session_id: data.session_id,
+              video_id: data.video_id,
+            },
+          });
+        } else if (data.status === "error") {
+          clearInterval(interval);
+          setUploadJobId(null);
+          setIsLoading(false);
+          setError(formatApiError({ response: { data: { detail: data.detail } } }, "Processing failed."));
+        }
+      } catch (err) {
+        clearInterval(interval);
+        setUploadJobId(null);
+        setIsLoading(false);
+        setError(formatApiError(err, "Unable to check processing status."));
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [uploadJobId, navigate]);
+
   const handleHistoryClick = (entry: HistoryEntry) => {
     navigate("/dashboard", {
       state: {
@@ -264,17 +315,28 @@ const LandingPage = () => {
       try {
         const formData = new FormData();
         formData.append("file", uploadFile);
-        const response = await api.post("/upload/process", formData, {
-          timeout: 300000,
-        });
-        const { summary, status: responseStatus, session_id, video_id } = response.data;
-        navigate("/dashboard", {
-          state: { summary, status: responseStatus, session_id, video_id },
-        });
+        const response = await api.post("/upload/process", formData);
+        const data = response.data;
+
+        if (data.status === "chat_ready") {
+          // Cache hit — navigate immediately
+          navigate("/dashboard", {
+            state: {
+              summary: data.summary,
+              status: data.status,
+              session_id: data.session_id,
+              video_id: data.video_id,
+            },
+          });
+        } else if (data.status === "processing") {
+          // Background task started — begin polling
+          setStatus("Processing file… this may take a minute.");
+          setUploadJobId(data.job_id);
+          // keep isLoading true while polling
+        }
       } catch (err) {
-        setError(formatApiError(err, "Unable to process the file. Please try again."));
-      } finally {
         setIsLoading(false);
+        setError(formatApiError(err, "Unable to process the file. Please try again."));
       }
       return;
     }
@@ -318,8 +380,8 @@ const LandingPage = () => {
       <LandingBackground />
 
       <AnalyzingModal
-        open={isLoading && tab === "youtube"}
-        label={url.trim() || undefined}
+        open={isLoading}
+        label={tab === "youtube" ? url.trim() || undefined : uploadFile?.name}
       />
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
