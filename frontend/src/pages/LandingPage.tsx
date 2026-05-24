@@ -150,7 +150,7 @@ const LandingPage = () => {
     if (!jobId) return;
 
     let polls = 0;
-    const MAX_POLLS = 40; // 40 × 3s = 2 minutes max
+    const MAX_POLLS = 60; // 60 × 3s = 3 minutes max
 
     const interval = setInterval(async () => {
       polls += 1;
