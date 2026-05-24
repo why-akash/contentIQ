@@ -123,7 +123,12 @@ const LandingPage = () => {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
 
   useEffect(() => {
-    api.get("/youtube/history").then((res) => setHistory(res.data)).catch(() => {});
+    api.get("/youtube/history")
+      .then((res) => {
+        const data = res.data;
+        setHistory(Array.isArray(data) ? data : []);
+      })
+      .catch(() => setHistory([]));
   }, []);
 
   const handleHistoryClick = (entry: HistoryEntry) => {
