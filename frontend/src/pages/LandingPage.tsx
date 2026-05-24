@@ -17,11 +17,13 @@ import { useNavigate } from "react-router-dom";
 import api from "../api/api";
 import { formatApiError } from "../utils/formatApiError";
 import { BackendArchitecture } from "../components/landing/BackendArchitecture";
+import { AnalyzingModal } from "../components/landing/AnalyzingModal";
 
 type HistoryEntry = {
   video_id: string;
   title: string;
-  summary: string | Record<string, unknown>;
+  summary: string | Record<string, unknown> | null;
+  status?: "processing" | "chat_ready" | "error";
 };
 
 
@@ -120,16 +122,67 @@ const LandingPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [jobId, setJobId] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
 
-  useEffect(() => {
+  const refreshHistory = () => {
     api.get("/youtube/history")
       .then((res) => {
         const data = res.data;
         setHistory(Array.isArray(data) ? data : []);
       })
       .catch(() => setHistory([]));
+  };
+
+  useEffect(() => {
+    refreshHistory();
   }, []);
+
+  // Re-poll history every 5s while any entry is still processing
+  useEffect(() => {
+    const hasProcessing = history.some((e) => e.status === "processing");
+    if (!hasProcessing) return;
+    const t = setInterval(refreshHistory, 5000);
+    return () => clearInterval(t);
+  }, [history]);
+
+  useEffect(() => {
+    if (!jobId) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.get(`/youtube/status/${jobId}`);
+        const data = res.data;
+
+        if (data.status === "chat_ready") {
+          clearInterval(interval);
+          setJobId(null);
+          setIsLoading(false);
+          navigate("/dashboard", {
+            state: {
+              summary: data.summary,
+              status: data.status,
+              session_id: data.session_id,
+              video_id: data.video_id,
+              youtube_url: url.trim(),
+            },
+          });
+        } else if (data.status === "error") {
+          clearInterval(interval);
+          setJobId(null);
+          setIsLoading(false);
+          setError(formatApiError({ response: { data: { detail: data.detail } } }, "Processing failed."));
+        }
+      } catch (err) {
+        clearInterval(interval);
+        setJobId(null);
+        setIsLoading(false);
+        setError(formatApiError(err, "Unable to check processing status."));
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [jobId, navigate, url]);
 
   const handleHistoryClick = (entry: HistoryEntry) => {
     navigate("/dashboard", {
@@ -220,30 +273,40 @@ const LandingPage = () => {
     setIsLoading(true);
 
     try {
-      const response = await api.post(
-        "/youtube/process",
-        { youtube_url: url.trim() },
-        { timeout: 120000 },
-      );
-      const { summary, status: responseStatus, session_id, video_id } = response.data;
-      setStatus(
-        summary
-          ? "Video analyzed. Summary and timestamps are ready."
-          : `Video processed. ${responseStatus ?? "AI answers will appear soon."}`,
-      );
-      navigate("/dashboard", {
-        state: { summary, status: responseStatus, session_id, video_id, youtube_url: url.trim() },
-      });
+      const response = await api.post("/youtube/process", { youtube_url: url.trim() });
+      const data = response.data;
+
+      if (data.status === "chat_ready") {
+        // Cache hit — navigate immediately
+        navigate("/dashboard", {
+          state: {
+            summary: data.summary,
+            status: data.status,
+            session_id: data.session_id,
+            video_id: data.video_id,
+            youtube_url: url.trim(),
+          },
+        });
+      } else if (data.status === "processing") {
+        // Background task started — begin polling
+        setStatus("Analyzing video… this may take up to a minute.");
+        setJobId(data.job_id);
+        // keep isLoading true while polling
+      }
     } catch (error) {
-      setError(formatApiError(error, "Unable to analyze the video. Please try again."));
-    } finally {
       setIsLoading(false);
+      setError(formatApiError(error, "Unable to analyze the video. Please try again."));
     }
   };
 
   return (
     <div className="relative min-h-screen text-slate-100">
       <LandingBackground />
+
+      <AnalyzingModal
+        open={isLoading && tab === "youtube"}
+        label={url.trim() || undefined}
+      />
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
         <motion.header
@@ -610,31 +673,74 @@ const LandingPage = () => {
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {history.slice(0, 6).map((entry, i) => (
-                  <motion.button
-                    key={entry.video_id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.55 + i * 0.06 }}
-                    onClick={() => handleHistoryClick(entry)}
-                    className="glass-panel group flex gap-3 rounded-xl p-3 text-left transition duration-300 hover:border-orange-500/30 hover:bg-slate-800/60"
-                  >
-                    <img
-                      src={`https://img.youtube.com/vi/${entry.video_id}/mqdefault.jpg`}
-                      alt=""
-                      className="h-16 w-24 shrink-0 rounded-lg object-cover"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-slate-100">
-                        {entry.title}
-                      </p>
-                      <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-slate-500">
-                        {getSummaryPreview(entry.summary)}
-                      </p>
-                    </div>
-                    <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-slate-600 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:text-orange-400" />
-                  </motion.button>
-                ))}
+                {history.slice(0, 6).map((entry, i) => {
+                  const isProcessing = entry.status === "processing";
+                  const isError = entry.status === "error";
+
+                  return (
+                    <motion.button
+                      key={entry.video_id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.55 + i * 0.06 }}
+                      onClick={() => !isProcessing && !isError && handleHistoryClick(entry)}
+                      disabled={isProcessing || isError}
+                      className={`glass-panel group flex gap-3 rounded-xl p-3 text-left transition duration-300 ${
+                        isProcessing || isError
+                          ? "cursor-default opacity-75"
+                          : "hover:border-orange-500/30 hover:bg-slate-800/60"
+                      }`}
+                    >
+                      {/* Thumbnail with overlay for non-ready states */}
+                      <div className="relative h-16 w-24 shrink-0">
+                        <img
+                          src={`https://img.youtube.com/vi/${entry.video_id}/mqdefault.jpg`}
+                          alt=""
+                          className="h-full w-full rounded-lg object-cover"
+                        />
+                        {isProcessing && (
+                          <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-slate-900/70">
+                            <Loader2 className="h-5 w-5 animate-spin text-orange-400" />
+                          </div>
+                        )}
+                        {isError && (
+                          <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-slate-900/70">
+                            <span className="text-xs text-red-400">✕</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        {/* Status badge */}
+                        {isProcessing && (
+                          <span className="mb-1 inline-flex items-center gap-1 rounded-full bg-orange-500/10 px-2 py-0.5 text-[10px] font-medium text-orange-400 border border-orange-500/20">
+                            <span className="h-1.5 w-1.5 rounded-full bg-orange-400 animate-pulse" />
+                            Analyzing…
+                          </span>
+                        )}
+                        {isError && (
+                          <span className="mb-1 inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-400 border border-red-500/20">
+                            Failed
+                          </span>
+                        )}
+                        <p className="truncate text-sm font-semibold text-slate-100">
+                          {entry.title}
+                        </p>
+                        <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-slate-500">
+                          {isProcessing
+                            ? "Processing in background…"
+                            : isError
+                            ? "Analysis failed. Try resubmitting."
+                            : getSummaryPreview(entry.summary ?? "")}
+                        </p>
+                      </div>
+
+                      {!isProcessing && !isError && (
+                        <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-slate-600 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:text-orange-400" />
+                      )}
+                    </motion.button>
+                  );
+                })}
               </div>
             </motion.section>
           )}
