@@ -16,14 +16,13 @@ from app.api.routes.upload import (
 )
 
 from app.core.config import settings
-from app.rag.vector_store import get_embedding_model
+from app.rag.vector_store import OnnxEmbeddings
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Pre-warm embedding model so first request doesn't pay the load cost
-    print("[startup] pre-loading embedding model...")
-    get_embedding_model()
+    print("[startup] pre-loading ONNX embedding model...")
+    OnnxEmbeddings()  # initialise singleton — loads ~90MB ONNX model once
     print("[startup] embedding model ready ✅")
     yield
 
