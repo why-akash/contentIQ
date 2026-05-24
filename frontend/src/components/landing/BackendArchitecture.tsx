@@ -2,11 +2,11 @@ import { motion } from "framer-motion";
 import { Brain, Database, Layers, MessageSquare, Mic2, Zap } from "lucide-react";
 
 const C = {
-  orange:  "#f97316",
-  violet:  "#a78bfa",
-  sky:     "#38bdf8",
-  emerald: "#34d399",
-  rose:    "#fb7185",
+  orange:   "#f97316",
+  violet:   "#a78bfa",
+  sky:      "#38bdf8",
+  emerald:  "#34d399",
+  rose:     "#fb7185",
 };
 
 // Animated flowing dashed path
@@ -85,7 +85,7 @@ const steps = [
     num: "02",
     color: C.violet,
     title: "Smart Transcription",
-    desc: "YouTube Transcript API for captioned videos. Falls back to Groq Whisper-large-v3-turbo when the IP is blocked, captions are missing, or a file is uploaded.",
+    desc: "Three-tier fallback: YT Transcript API (primary) → Supadata API (when IP-blocked or captions missing) → yt-dlp + Groq Whisper-large-v3-turbo (last resort or file uploads).",
   },
   {
     icon: Brain,
@@ -99,7 +99,7 @@ const steps = [
     num: "04",
     color: C.emerald,
     title: "Semantic Indexing",
-    desc: "Segments chunked into 2-min windows, embedded with sentence-transformers/all-MiniLM-L6-v2, and persisted in ChromaDB keyed by video_id.",
+    desc: "Segments chunked into 2-min windows, embedded with ONNX MiniLM-L6-v2, and persisted in ChromaDB keyed by video_id.",
   },
   {
     icon: MessageSquare,
@@ -135,7 +135,7 @@ export const BackendArchitecture = () => {
       {/* Diagram */}
       <div className="glass-panel rounded-2xl p-3 sm:p-5 overflow-hidden">
         <svg
-          viewBox="0 0 880 612"
+          viewBox="0 0 880 630"
           width="100%"
           style={{ overflow: "visible", display: "block" }}
         >
@@ -143,13 +143,14 @@ export const BackendArchitecture = () => {
           <Box x={45}  y={18} w={210} h={52} label="YouTube URL"  sub="/youtube/process"  stroke={C.orange} />
           <Box x={625} y={18} w={210} h={52} label="File Upload"   sub="/upload/process"   stroke={C.orange} />
 
-          {/* ── ffmpeg node for video uploads (sits between input and transcription) ── */}
-          <Box x={600} y={80} w={192} h={30} label="ffmpeg 64kbps mp3" stroke={C.rose} />
+          {/* ── ffmpeg node for video uploads ── */}
+          <Box x={584} y={78} w={195} h={30} label="ffmpeg 64kbps mp3" stroke={C.rose} />
 
-          {/* ── TRANSCRIPTION LAYER ── */}
-          <Box x={10}  y={122} w={205} h={50} label="YT Transcript API"  sub="captions available"     stroke={C.emerald} />
-          <Box x={228} y={122} w={195} h={50} label="yt-dlp + ffmpeg"    sub="YouTube fallback only"  stroke={C.rose}    />
-          <Box x={593} y={122} w={228} h={50} label="Groq Whisper"       sub="whisper-large-v3-turbo" stroke={C.violet}  />
+          {/* ── TRANSCRIPTION LAYER (three-tier cascade left→right) ── */}
+          <Box x={5}   y={122} w={155} h={50} label="YT Transcript API"  sub="primary · captions"       stroke={C.emerald} />
+          <Box x={183} y={122} w={130} h={50} label="Supadata API"        sub="tier-2 · IP blocked"      stroke={C.sky}     />
+          <Box x={336} y={122} w={130} h={50} label="yt-dlp + ffmpeg"     sub="tier-3 · audio download"  stroke={C.rose}    />
+          <Box x={562} y={122} w={245} h={50} label="Groq Whisper"        sub="whisper-large-v3-turbo"   stroke={C.violet}  />
 
           {/* ── SEGMENTS ── */}
           <Box x={328} y={228} w={224} h={44} label="Transcript Segments" sub="{text, start, duration}[]" stroke={C.sky} />
@@ -171,34 +172,41 @@ export const BackendArchitecture = () => {
 
           {/* ══════ FLOWS ══════ */}
 
-          {/* YouTube → YT API (fast) */}
-          <Flow d="M 150 70 C 150 100 112 100 112 122" color={C.emerald} delay={0} />
-          <EL x={120} y={98} text="fast path" color={C.emerald} />
+          {/* YouTube → YT API (primary fast path) */}
+          <Flow d="M 150 70 C 150 95 82 95 82 122" color={C.emerald} delay={0} />
+          <EL x={90} y={93} text="fast path" color={C.emerald} />
 
-          {/* YouTube → yt-dlp (fallback) */}
-          <Flow d="M 205 70 C 205 99 325 99 325 122" color={C.rose} delay={0.25} />
-          <EL x={272} y={92} text="blocked / no captions" color={C.rose} />
+          {/* YT API → Supadata (tier-2: IP blocked / missing captions) — arc below boxes */}
+          <Flow d="M 160 147 C 160 185 183 185 183 147" color={C.sky} delay={0.15} />
+          <EL x={171} y={192} text="IP blocked" color={C.sky} />
+
+          {/* Supadata → yt-dlp (tier-3: Supadata API fails) — arc below boxes */}
+          <Flow d="M 313 147 C 313 185 336 185 336 147" color={C.rose} delay={0.3} />
+          <EL x={324} y={192} text="API fails" color={C.rose} />
+
+          {/* yt-dlp → Groq Whisper (download audio → transcribe) */}
+          <Flow d="M 466 147 L 562 147" color={C.violet} delay={0.45} />
+          <EL x={514} y={140} text="mp3 audio" color={C.violet} />
 
           {/* File Upload → ffmpeg (if video file) */}
-          <Flow d="M 715 70 C 715 77 696 77 696 80" color={C.rose} delay={0} />
-          <EL x={674} y={73} text="if video" color={C.rose} />
+          <Flow d="M 730 70 C 730 75 681 75 681 78" color={C.rose} delay={0} />
+          <EL x={706} y={72} text="if video" color={C.rose} />
 
           {/* ffmpeg → Groq Whisper */}
-          <Flow d="M 696 110 L 696 122" color={C.rose} delay={0.1} />
+          <Flow d="M 681 108 L 681 122" color={C.rose} delay={0.1} />
 
-          {/* File Upload → Groq Whisper (if audio, no conversion needed) */}
+          {/* File Upload → Groq Whisper (if audio, no ffmpeg needed) */}
           <Flow d="M 800 70 L 800 122" color={C.violet} delay={0} />
-          <EL x={826} y={96} text="if audio" color={C.violet} />
+          <EL x={820} y={96} text="if audio" color={C.violet} />
 
-          {/* yt-dlp → Groq Whisper */}
-          <Flow d="M 423 147 L 593 147" color={C.violet} delay={0.3} />
-          <EL x={508} y={140} text="mp3 audio" color={C.violet} />
+          {/* YT API → Segments (success) */}
+          <Flow d="M 82 172 C 82 208 390 228 390 228" color={C.sky} delay={0} />
 
-          {/* YT API → Segments */}
-          <Flow d="M 112 172 C 112 208 378 228 378 228" color={C.sky} delay={0} />
+          {/* Supadata → Segments (success) */}
+          <Flow d="M 248 172 C 248 210 420 228 420 228" color={C.sky} delay={0.1} />
 
           {/* Groq Whisper → Segments */}
-          <Flow d="M 707 172 C 707 208 502 228 502 228" color={C.sky} delay={0.15} />
+          <Flow d="M 684 172 C 684 208 502 228 502 228" color={C.sky} delay={0.15} />
 
           {/* Segments → ChromaDB */}
           <Flow d="M 328 250 C 218 250 117 290 117 312" color={C.emerald} delay={0.1} />
@@ -230,12 +238,11 @@ export const BackendArchitecture = () => {
           {/* Summary → Chat */}
           <Flow d="M 439 526 L 439 558" color={C.orange} delay={0} />
 
-          {/* JSON Cache feeds /youtube/process and /upload/process on cache hit — not /chat/ */}
         </svg>
       </div>
 
       {/* Step cards */}
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {steps.map((step, i) => (
           <motion.div
             key={step.num}
