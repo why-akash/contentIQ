@@ -1,10 +1,7 @@
-from fastapi import (
-    FastAPI
-)
+from contextlib import asynccontextmanager
 
-from fastapi.middleware.cors import (
-    CORSMiddleware
-)
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.youtube import (
     router as youtube_router
@@ -18,13 +15,20 @@ from app.api.routes.upload import (
     router as upload_router
 )
 
-from app.core.config import (
-    settings
-)
+from app.core.config import settings
+from app.rag.vector_store import get_embedding_model
 
-app = FastAPI(
-    title="ContentIQ API"
-)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Pre-warm embedding model so first request doesn't pay the load cost
+    print("[startup] pre-loading embedding model...")
+    get_embedding_model()
+    print("[startup] embedding model ready ✅")
+    yield
+
+
+app = FastAPI(title="ContentIQ API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
