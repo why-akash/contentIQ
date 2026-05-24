@@ -23,5 +23,15 @@ class Settings:
         ).split(",")
     ]
 
+    YOUTUBE_COOKIES = os.getenv(
+        "YOUTUBE_COOKIES",
+        None
+    )
+
+    SUPADATA_API_KEY = os.getenv(
+        "SUPADATA_API_KEY",
+        None
+    )
+
 
 settings = Settings()
