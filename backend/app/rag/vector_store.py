@@ -22,10 +22,10 @@ class OnnxEmbeddings(Embeddings):
         return cls._instance
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        return [list(v) for v in self._ef(texts)]
+        return [v.tolist() for v in self._ef(texts)]
 
     def embed_query(self, text: str) -> List[float]:
-        return list(self._ef([text])[0])
+        return self._ef([text])[0].tolist()
 
 
 class VectorStoreService:
