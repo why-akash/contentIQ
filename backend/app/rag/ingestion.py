@@ -157,29 +157,19 @@ class IngestionService:
         video_id: str
     ):
 
-        grouped_chunks = (
-            self.group_segments(
-                transcript_segments
-            )
-        )
+        print(f"\n[embed] starting — {len(transcript_segments)} segments, video_id={video_id}")
 
-        docs = (
-            self.create_documents(
-                grouped_chunks,
-                session_id,
-                video_id
-            )
-        )
+        grouped_chunks = self.group_segments(transcript_segments)
+        print(f"[embed] grouped into {len(grouped_chunks)} chunks")
 
-        vector_store = (
-            VectorStoreService()
-            .get_vector_store(
-                session_id
-            )
-        )
+        docs = self.create_documents(grouped_chunks, session_id, video_id)
+        print(f"[embed] created {len(docs)} documents")
 
-        vector_store.add_documents(
-            docs
-        )
+        print(f"[embed] getting vector store...")
+        vector_store = VectorStoreService().get_vector_store(session_id)
 
+        print(f"[embed] adding documents to ChromaDB...")
+        vector_store.add_documents(docs)
+
+        print(f"[embed] ✅ done\n")
         return True
