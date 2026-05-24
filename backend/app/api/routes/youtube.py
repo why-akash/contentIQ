@@ -1,9 +1,10 @@
 import uuid
 import json
 import os
+import asyncio
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from app.models.youtube_model import YoutubeRequest
 from app.services.transcript_service import TranscriptService
 from app.services.content_service import ContentService
@@ -70,7 +71,20 @@ async def process_youtube(request: YoutubeRequest):
             "status": "chat_ready"
         }
 
-    transcript_data = TranscriptService.get_youtube_transcript(request.youtube_url)
+    try:
+        loop = asyncio.get_event_loop()
+        transcript_data = await asyncio.wait_for(
+            loop.run_in_executor(None, TranscriptService.get_youtube_transcript, request.youtube_url),
+            timeout=50,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=504,
+            detail={
+                "status": "timeout",
+                "message": "Transcript fetch timed out. Try a shorter video or upload the file directly."
+            }
+        )
 
     summary = ContentService.generate_summary(transcript_data["segments"])
 

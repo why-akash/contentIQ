@@ -197,6 +197,8 @@ class TranscriptService:
                 "format": "bestaudio/best",
                 "outtmpl": audio_path + ".%(ext)s",
                 "quiet": True,
+                "socket_timeout": 10,
+                "retries": 1,
                 "postprocessors": [{
                     "key": "FFmpegExtractAudio",
                     "preferredcodec": "mp3",
