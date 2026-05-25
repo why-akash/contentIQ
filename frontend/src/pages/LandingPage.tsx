@@ -57,7 +57,7 @@ const previewTimestamps = [
 ];
 
 const validateYoutubeUrl = (value: string) =>
-  /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]{11}(&.*)?$/i.test(
+  /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|shorts\/|live\/)|youtu\.be\/)[\w-]{11}([?&].*)?$/i.test(
     value.trim(),
   );
 

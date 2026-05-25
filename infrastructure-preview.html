@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ContentIQ — Architecture</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 1280px;
+    height: 720px;
+    background: #020410;
+    font-family: system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .canvas {
+    width: 1280px;
+    height: 720px;
+    position: relative;
+  }
+
+  /* ── background glows ── */
+  .glow-1 {
+    position: absolute; border-radius: 50%;
+    width: 500px; height: 500px;
+    background: radial-gradient(ellipse, rgba(249,115,22,0.18) 0%, transparent 70%);
+    top: -100px; left: -80px;
+    animation: drift1 8s ease-in-out infinite;
+  }
+  .glow-2 {
+    position: absolute; border-radius: 50%;
+    width: 420px; height: 420px;
+    background: radial-gradient(ellipse, rgba(167,139,250,0.15) 0%, transparent 70%);
+    bottom: -60px; right: -60px;
+    animation: drift2 10s ease-in-out infinite;
+  }
+  .glow-3 {
+    position: absolute; border-radius: 50%;
+    width: 350px; height: 350px;
+    background: radial-gradient(ellipse, rgba(56,189,248,0.10) 0%, transparent 70%);
+    top: 50%; left: 50%; transform: translate(-50%,-50%);
+    animation: drift3 12s ease-in-out infinite;
+  }
+
+  @keyframes drift1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(30px,20px)} }
+  @keyframes drift2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-20px,-30px)} }
+  @keyframes drift3 { 0%,100%{transform:translate(-50%,-50%)} 50%{transform:translate(-48%,-52%)} }
+
+  /* ── grid overlay ── */
+  .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* ── header ── */
+  .header {
+    position: absolute;
+    top: 22px; left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    z-index: 10;
+  }
+  .brand {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(249,115,22,0.25);
+    border-radius: 999px;
+    padding: 6px 18px 6px 12px;
+    margin-bottom: 8px;
+  }
+  .brand-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #f97316;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.85)} }
+  .brand-name { color: #f97316; font-size: 13px; font-weight: 700; letter-spacing: 0.05em; }
+  .header h1 {
+    font-size: 22px; font-weight: 700;
+    color: #f1f5f9; letter-spacing: -0.02em;
+  }
+  .header h1 span { color: #f97316; }
+
+  /* ── flow SVG ── */
+  .flow-svg {
+    position: absolute;
+    top: 85px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+  }
+
+  /* animated dashed paths */
+  .flow-line {
+    fill: none;
+    stroke-width: 1.5;
+    stroke-dasharray: 6 4;
+    animation: flow 1s linear infinite;
+  }
+  @keyframes flow { to { stroke-dashoffset: -10; } }
+
+  /* node boxes */
+  .node rect {
+    fill: rgba(15,23,42,0.95);
+    stroke-width: 1.5;
+    rx: 8;
+  }
+  .node text {
+    fill: #f1f5f9;
+    font-family: system-ui, sans-serif;
+    font-weight: 600;
+  }
+  .node .sub {
+    font-weight: 400;
+    opacity: 0.75;
+  }
+
+  /* edge labels */
+  .el {
+    font-size: 9px;
+    font-family: system-ui, sans-serif;
+    opacity: 0.85;
+  }
+
+  /* section labels */
+  .section-label {
+    font-size: 8.5px;
+    font-family: system-ui, sans-serif;
+    fill: rgba(148,163,184,0.5);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  /* ── bottom footer ── */
+  .footer {
+    position: absolute;
+    bottom: 16px; left: 50%;
+    transform: translateX(-50%);
+    display: flex; align-items: center; gap: 20px;
+    z-index: 10;
+  }
+  .pill {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 11px; color: #94a3b8;
+    white-space: nowrap;
+  }
+  .pill-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+  /* node entrance animation */
+  .node { animation: nodeIn 0.5s ease backwards; }
+  @keyframes nodeIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="glow-1"></div>
+  <div class="glow-2"></div>
+  <div class="glow-3"></div>
+  <div class="grid"></div>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="brand">
+      <div class="brand-dot"></div>
+      <span class="brand-name">ContentIQ</span>
+    </div>
+    <h1>AI Pipeline — <span>Full Architecture</span></h1>
+  </div>
+
+  <!-- Architecture SVG -->
+  <svg class="flow-svg" viewBox="0 0 1140 560" width="1140" height="560">
+
+    <!-- ═══════════ SECTION LABELS ═══════════ -->
+    <text x="20" y="22" class="section-label">Input</text>
+    <text x="20" y="112" class="section-label">Transcript (3-tier fallback)</text>
+    <text x="20" y="242" class="section-label">Segments</text>
+    <text x="20" y="322" class="section-label">Summarization</text>
+    <text x="20" y="452" class="section-label">Vector Store + Chat</text>
+
+    <!-- ═══════════ INPUT LAYER ═══════════ -->
+    <!-- YouTube URL -->
+    <g class="node" style="animation-delay:0.0s">
+      <rect x="80" y="28" width="200" height="52" rx="9" stroke="#f97316"/>
+      <text x="180" y="51" text-anchor="middle" font-size="12">YouTube URL</text>
+      <text x="180" y="67" text-anchor="middle" font-size="9.5" class="sub" fill="#f97316">/youtube/process</text>
+    </g>
+
+    <!-- File Upload -->
+    <g class="node" style="animation-delay:0.1s">
+      <rect x="860" y="28" width="200" height="52" rx="9" stroke="#f97316"/>
+      <text x="960" y="51" text-anchor="middle" font-size="12">File Upload</text>
+      <text x="960" y="67" text-anchor="middle" font-size="9.5" class="sub" fill="#f97316">/upload/process</text>
+    </g>
+
+    <!-- ffmpeg -->
+    <g class="node" style="animation-delay:0.15s">
+      <rect x="850" y="90" width="180" height="28" rx="7" stroke="#fb7185"/>
+      <text x="940" y="108" text-anchor="middle" font-size="10">ffmpeg → 64kbps mp3</text>
+    </g>
+
+    <!-- ═══════════ TRANSCRIPT LAYER ═══════════ -->
+    <!-- YT Transcript API -->
+    <g class="node" style="animation-delay:0.2s">
+      <rect x="20" y="120" width="170" height="50" rx="9" stroke="#34d399"/>
+      <text x="105" y="142" text-anchor="middle" font-size="11.5">YT Transcript API</text>
+      <text x="105" y="158" text-anchor="middle" font-size="9" class="sub" fill="#34d399">primary · captions</text>
+    </g>
+
+    <!-- Supadata -->
+    <g class="node" style="animation-delay:0.28s">
+      <rect x="210" y="120" width="155" height="50" rx="9" stroke="#38bdf8"/>
+      <text x="287" y="142" text-anchor="middle" font-size="11.5">Supadata API</text>
+      <text x="287" y="158" text-anchor="middle" font-size="9" class="sub" fill="#38bdf8">tier-2 · IP blocked</text>
+    </g>
+
+    <!-- yt-dlp -->
+    <g class="node" style="animation-delay:0.36s">
+      <rect x="385" y="120" width="155" height="50" rx="9" stroke="#fb7185"/>
+      <text x="462" y="142" text-anchor="middle" font-size="11.5">yt-dlp + ffmpeg</text>
+      <text x="462" y="158" text-anchor="middle" font-size="9" class="sub" fill="#fb7185">tier-3 · download</text>
+    </g>
+
+    <!-- Groq Whisper -->
+    <g class="node" style="animation-delay:0.44s">
+      <rect x="560" y="120" width="240" height="50" rx="9" stroke="#a78bfa"/>
+      <text x="680" y="142" text-anchor="middle" font-size="11.5">Groq Whisper</text>
+      <text x="680" y="158" text-anchor="middle" font-size="9" class="sub" fill="#a78bfa">whisper-large-v3-turbo</text>
+    </g>
+
+    <!-- ═══════════ SEGMENTS ═══════════ -->
+    <g class="node" style="animation-delay:0.52s">
+      <rect x="380" y="250" width="270" height="44" rx="9" stroke="#38bdf8"/>
+      <text x="515" y="270" text-anchor="middle" font-size="11.5">Transcript Segments</text>
+      <text x="515" y="284" text-anchor="middle" font-size="9" class="sub" fill="#38bdf8">&#123;text, start, duration&#125;[]</text>
+    </g>
+
+    <!-- ═══════════ SUMMARIZATION ROW ═══════════ -->
+    <!-- tiktoken -->
+    <g class="node" style="animation-delay:0.58s">
+      <rect x="380" y="334" width="270" height="44" rx="9" stroke="#38bdf8"/>
+      <text x="515" y="354" text-anchor="middle" font-size="11.5">tiktoken Token Router</text>
+      <text x="515" y="368" text-anchor="middle" font-size="9" class="sub" fill="#38bdf8">counts tokens · decides path</text>
+    </g>
+
+    <!-- Single LLM Call -->
+    <g class="node" style="animation-delay:0.64s">
+      <rect x="200" y="418" width="195" height="44" rx="9" stroke="#f97316"/>
+      <text x="297" y="438" text-anchor="middle" font-size="11.5">Single LLM Call</text>
+      <text x="297" y="452" text-anchor="middle" font-size="9" class="sub" fill="#f97316">&lt; 8 000 tokens</text>
+    </g>
+
+    <!-- Map-Reduce -->
+    <g class="node" style="animation-delay:0.68s">
+      <rect x="635" y="418" width="195" height="44" rx="9" stroke="#f97316"/>
+      <text x="732" y="438" text-anchor="middle" font-size="11.5">Map-Reduce</text>
+      <text x="732" y="452" text-anchor="middle" font-size="9" class="sub" fill="#f97316">≥ 8 000 tokens</text>
+    </g>
+
+    <!-- ═══════════ BOTTOM ROW ═══════════ -->
+    <!-- ONNX + ChromaDB -->
+    <g class="node" style="animation-delay:0.74s">
+      <rect x="20" y="490" width="240" height="52" rx="9" stroke="#34d399"/>
+      <text x="140" y="513" text-anchor="middle" font-size="11.5">ONNX MiniLM + ChromaDB</text>
+      <text x="140" y="529" text-anchor="middle" font-size="9" class="sub" fill="#34d399">all-MiniLM-L6-v2 · video_id collection</text>
+    </g>
+
+    <!-- Groq LLaMA Summary -->
+    <g class="node" style="animation-delay:0.80s">
+      <rect x="310" y="490" width="320" height="52" rx="9" stroke="#a78bfa"/>
+      <text x="470" y="513" text-anchor="middle" font-size="11.5">Groq LLaMA 3.1 — Summary JSON</text>
+      <text x="470" y="529" text-anchor="middle" font-size="9" class="sub" fill="#a78bfa">tldr · key_concepts · takeaways · action_items</text>
+    </g>
+
+    <!-- Chat -->
+    <g class="node" style="animation-delay:0.88s">
+      <rect x="680" y="490" width="280" height="52" rx="9" stroke="#f97316"/>
+      <text x="820" y="510" text-anchor="middle" font-size="11.5">/chat/ — MMR Retrieval</text>
+      <text x="820" y="526" text-anchor="middle" font-size="9" class="sub" fill="#f97316">k=5  fetch_k=15 · session memory · LLaMA 3.1</text>
+    </g>
+
+    <!-- JSON Cache -->
+    <g class="node" style="animation-delay:0.76s">
+      <rect x="960" y="418" width="160" height="44" rx="9" stroke="#fb7185"/>
+      <text x="1040" y="438" text-anchor="middle" font-size="11">JSON Cache</text>
+      <text x="1040" y="452" text-anchor="middle" font-size="9" class="sub" fill="#fb7185">cache hits skip pipeline</text>
+    </g>
+
+    <!-- ═══════════════════ FLOW LINES ═══════════════════ -->
+
+    <!-- YouTube → YT API (primary) -->
+    <path class="flow-line" d="M 180 80 C 180 103 105 103 105 120" stroke="#34d399" style="animation-delay:0s"/>
+    <text x="128" y="101" class="el" fill="#34d399">fast path</text>
+
+    <!-- YT API → Supadata (cascade arc below) -->
+    <path class="flow-line" d="M 190 145 C 190 175 210 175 210 145" stroke="#38bdf8" style="animation-delay:0.1s"/>
+    <text x="193" y="183" class="el" fill="#38bdf8">IP blocked</text>
+
+    <!-- Supadata → yt-dlp (cascade arc below) -->
+    <path class="flow-line" d="M 365 145 C 365 175 385 175 385 145" stroke="#fb7185" style="animation-delay:0.2s"/>
+    <text x="363" y="183" class="el" fill="#fb7185">API fails</text>
+
+    <!-- yt-dlp → Groq Whisper -->
+    <path class="flow-line" d="M 540 145 L 560 145" stroke="#a78bfa" style="animation-delay:0.3s"/>
+    <text x="542" y="138" class="el" fill="#a78bfa">mp3 audio</text>
+
+    <!-- File Upload → ffmpeg -->
+    <path class="flow-line" d="M 960 80 L 960 90" stroke="#fb7185" style="animation-delay:0s"/>
+    <text x="966" y="88" class="el" fill="#fb7185">if video</text>
+
+    <!-- ffmpeg → Groq Whisper -->
+    <path class="flow-line" d="M 920 118 C 880 118 800 120 800 120" stroke="#fb7185" style="animation-delay:0.1s"/>
+
+    <!-- File Upload → Groq Whisper (if audio) -->
+    <path class="flow-line" d="M 1010 80 C 1010 92 850 100 800 120" stroke="#a78bfa" style="animation-delay:0s"/>
+    <text x="930" y="97" class="el" fill="#a78bfa">if audio</text>
+
+    <!-- YT API → Segments -->
+    <path class="flow-line" d="M 105 170 C 105 218 430 250 430 250" stroke="#38bdf8" style="animation-delay:0.0s"/>
+
+    <!-- Supadata → Segments -->
+    <path class="flow-line" d="M 287 170 C 287 218 470 250 470 250" stroke="#38bdf8" style="animation-delay:0.1s"/>
+
+    <!-- Groq Whisper → Segments -->
+    <path class="flow-line" d="M 680 170 C 680 218 560 250 560 250" stroke="#38bdf8" style="animation-delay:0.15s"/>
+
+    <!-- Segments → tiktoken -->
+    <path class="flow-line" d="M 515 294 L 515 334" stroke="#38bdf8" style="animation-delay:0s"/>
+
+    <!-- Segments → ChromaDB -->
+    <path class="flow-line" d="M 380 265 C 230 265 140 400 140 490" stroke="#34d399" style="animation-delay:0.1s"/>
+    <text x="195" y="348" class="el" fill="#34d399">embed + store</text>
+
+    <!-- tiktoken → Single LLM -->
+    <path class="flow-line" d="M 430 356 C 380 390 340 400 297 418" stroke="#f97316" style="animation-delay:0.1s"/>
+    <text x="342" y="393" class="el" fill="#f97316">&lt; 8k</text>
+
+    <!-- tiktoken → Map-Reduce -->
+    <path class="flow-line" d="M 600 356 C 650 390 700 400 732 418" stroke="#f97316" style="animation-delay:0.2s"/>
+    <text x="672" y="393" class="el" fill="#f97316">≥ 8k</text>
+
+    <!-- Single LLM → Summary -->
+    <path class="flow-line" d="M 297 462 C 297 478 420 490 420 490" stroke="#a78bfa" style="animation-delay:0.1s"/>
+
+    <!-- Map-Reduce → Summary -->
+    <path class="flow-line" d="M 732 462 C 732 478 600 490 600 490" stroke="#a78bfa" style="animation-delay:0.2s"/>
+
+    <!-- Summary → JSON Cache -->
+    <path class="flow-line" d="M 630 516 C 780 516 920 440 960 440" stroke="#fb7185" style="animation-delay:0s"/>
+    <text x="786" y="485" class="el" fill="#fb7185">cache hit</text>
+
+    <!-- ChromaDB → Chat -->
+    <path class="flow-line" d="M 260 516 C 500 516 720 516 680 516" stroke="#34d399" style="animation-delay:0.2s"/>
+
+    <!-- Summary → Chat -->
+    <path class="flow-line" d="M 630 516 L 680 516" stroke="#f97316" style="animation-delay:0s"/>
+
+  </svg>
+
+  <!-- Footer pills -->
+  <div class="footer">
+    <div class="pill"><div class="pill-dot" style="background:#34d399"></div>FastAPI + LangChain</div>
+    <div class="pill"><div class="pill-dot" style="background:#a78bfa"></div>Groq LLaMA 3.3-70B</div>
+    <div class="pill"><div class="pill-dot" style="background:#f97316"></div>Groq Whisper</div>
+    <div class="pill"><div class="pill-dot" style="background:#38bdf8"></div>ChromaDB + ONNX</div>
+    <div class="pill"><div class="pill-dot" style="background:#fb7185"></div>React + Vite</div>
+    <div class="pill"><div class="pill-dot" style="background:#34d399"></div>Render + Vercel</div>
+  </div>
+
+</div>
+</body>
+</html>
